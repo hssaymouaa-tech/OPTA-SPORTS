@@ -1,0 +1,44 @@
+name: Claude WIF test
+
+# Runs only on a push to main that touches this file.
+# The federation rule only accepts event_name = push on refs/heads/main.
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/claude-wif-test.yml
+
+permissions:
+  id-token: write   # lets the runner request a GitHub OIDC token
+  contents: read
+
+jobs:
+  claude:
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_ORGANIZATION_ID: ${{ vars.ANTHROPIC_ORGANIZATION_ID }}
+      ANTHROPIC_FEDERATION_RULE_ID: ${{ vars.ANTHROPIC_FEDERATION_RULE_ID }}
+      ANTHROPIC_SERVICE_ACCOUNT_ID: ${{ vars.ANTHROPIC_SERVICE_ACCOUNT_ID }}
+      ANTHROPIC_IDENTITY_TOKEN_FILE: /tmp/gha-jwt
+    steps:
+      - name: Fetch GitHub OIDC token
+        run: |
+          curl -sS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://api.anthropic.com" \
+            | jq -r .value > /tmp/gha-jwt
+
+      - name: Install SDK
+        run: pip install anthropic
+
+      - name: Call Claude
+        run: |
+          python - <<'EOF'
+          import anthropic
+          client = anthropic.Anthropic()  # reads the ANTHROPIC_* env vars above
+          msg = client.messages.create(
+              model="claude-opus-5-5",
+              max_tokens=50,
+              messages=[{"role": "user", "content": "Reply with: WIF OK"}],
+          )
+          print(msg.content[0].text)
+          EOF
